@@ -14,22 +14,24 @@ Moderne Compiler (Clang >= 12, GCC >= 10) verwenden stattdessen `-no-pie`.
 ## Installation
 
 ```bash
-# 1. Hotfix herunterladen
+# 1. Repo klonen
 git clone https://github.com/unicbda-droid/titan-linux-hotfix.git
 cd titan-linux-hotfix
 
-# 2. Ausfuehren (automatische Erkennung)
-./titan-linux-hotfix.sh
+# 2. Kompilieren (optional, fertiges Binary liegt bei)
+gcc -std=c99 -O2 -o titan-linux-hotfix titan-linux-hotfix.c
+
+# 3. Ausfuehren (automatische Suche nach nbproject)
+./titan-linux-hotfix
 
 # Oder mit Pfad:
-./titan-linux-hotfix.sh /pfad/zu/Titan
+./titan-linux-hotfix /pfad/zu/Titan
 ```
 
 ## Was der Fix macht
 
 1. Ersetzt `-nopie` durch `-no-pie` in allen generierten Makefiles und XML-Konfigurationen
-2. Entfernt veraltete Precompiled-Header-Dateien (bei Aenderungen an Headern)
-3. Prueft auf fehlende Abhaengigkeiten (clang, libX11, etc.)
+2. Entfernt veraltete Precompiled-Header-Dateien (`.pch`, `.gch`)
 
 ## Build nach dem Fix
 
