@@ -83,6 +83,63 @@ static int remove_pch(const char *dir)
     return count;
 }
 
+static int process_nbproject(const char *nbproject, int *total)
+{
+    const char *files[] = {
+        "Makefile-Debug.mk",
+        "Makefile-Release.mk",
+        "configurations.xml",
+        NULL
+    };
+
+    printf("\n  nbproject: %s\n", nbproject);
+    for (int i = 0; files[i]; i++) {
+        char path[MAX_PATH];
+        snprintf(path, sizeof(path), "%s/%s", nbproject, files[i]);
+        printf("    %s: ", files[i]);
+        int result = replace_in_file(path);
+        if (result > 0) {
+            printf("fixed\n");
+            (*total)++;
+        } else if (result == 0) {
+            printf("ok\n");
+        } else {
+            printf("skipped\n");
+        }
+    }
+
+    int pch = remove_pch(nbproject);
+    if (pch > 0) printf("    removed %d stale PCH\n", pch);
+    return 0;
+}
+
+static int scan_projects(const char *build_dir)
+{
+    DIR *d = opendir(build_dir);
+    if (!d) return -1;
+
+    struct dirent *entry;
+    int total = 0;
+    while ((entry = readdir(d)) != NULL) {
+        if (entry->d_name[0] == '.') continue;
+
+        char proj_dir[MAX_PATH];
+        snprintf(proj_dir, sizeof(proj_dir), "%s/%s", build_dir, entry->d_name);
+
+        struct stat st;
+        if (stat(proj_dir, &st) != 0 || !S_ISDIR(st.st_mode)) continue;
+
+        char nbproject[MAX_PATH];
+        snprintf(nbproject, sizeof(nbproject), "%s/nbproject", proj_dir);
+
+        if (stat(nbproject, &st) == 0 && S_ISDIR(st.st_mode)) {
+            process_nbproject(nbproject, &total);
+        }
+    }
+    closedir(d);
+    return total;
+}
+
 int main(int argc, char **argv)
 {
     const char *titan_dir;
@@ -93,49 +150,25 @@ int main(int argc, char **argv)
     if (!titan_dir)
         titan_dir = ".";
 
-    char nbproject[MAX_PATH];
-    snprintf(nbproject, sizeof(nbproject), "%s/%s", titan_dir, "nbproject");
+    char build_dir[MAX_PATH];
+    snprintf(build_dir, sizeof(build_dir), "%s/Projects/_Build_", titan_dir);
 
     struct stat st;
-    if (stat(nbproject, &st) != 0 || !S_ISDIR(st.st_mode)) {
-        snprintf(nbproject, sizeof(nbproject), "%s/Projects/_Build_/Application/nbproject", titan_dir);
-        if (stat(nbproject, &st) != 0 || !S_ISDIR(st.st_mode)) {
-            fprintf(stderr, "Error: cannot find nbproject directory under %s\n", titan_dir);
-            return 1;
-        }
+    if (stat(build_dir, &st) != 0 || !S_ISDIR(st.st_mode)) {
+        fprintf(stderr, "Error: cannot find Projects/_Build_ under %s\n", titan_dir);
+        return 1;
     }
 
     printf("Titan Linux Hotfix\n");
-    printf("Scanning: %s\n\n", nbproject);
+    printf("Scanning: %s\n", build_dir);
 
-    const char *files[] = {
-        "Makefile-Debug.mk",
-        "Makefile-Release.mk",
-        "configurations.xml",
-        NULL
-    };
+    int total = scan_projects(build_dir);
 
-    int total = 0;
-    for (int i = 0; files[i]; i++) {
-        char path[MAX_PATH];
-        snprintf(path, sizeof(path), "%s/%s", nbproject, files[i]);
-        printf("Processing: %s\n", files[i]);
-        int result = replace_in_file(path);
-        if (result > 0) {
-            printf("  Fixed -nopie -> -no-pie\n");
-            total++;
-        } else if (result == 0) {
-            printf("  No -nopie flags found\n");
-        } else {
-            printf("  Skipped (error)\n");
-        }
+    if (total < 0) {
+        fprintf(stderr, "Error: cannot scan %s\n", build_dir);
+        return 1;
     }
 
-    printf("\nPCH cleanup:\n");
-    int pch_count = remove_pch(nbproject);
-    if (pch_count == 0)
-        printf("  No stale PCH files found\n");
-
-    printf("\nDone. %d file(s) patched.\n", total);
-    return total > 0 ? 0 : 0;
+    printf("\nDone. %d file(s) patched across all projects.\n", total);
+    return 0;
 }
